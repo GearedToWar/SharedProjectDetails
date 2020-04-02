@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using Task = System.Threading.Tasks.Task;
 
 namespace SharedProjectDetailsVsix
@@ -25,6 +26,8 @@ namespace SharedProjectDetailsVsix
     /// </remarks>
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [Guid(SharedProjectDetailsVsixPackage.PackageGuidString)]
+    [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
+    [ProvideMenuResource("Menus.ctmenu", 1)]
     public sealed class SharedProjectDetailsVsixPackage : AsyncPackage
     {
         /// <summary>
@@ -46,6 +49,8 @@ namespace SharedProjectDetailsVsix
             // When initialized asynchronously, the current thread may be a background thread at this point.
             // Do any initialization that requires the UI thread after switching to the UI thread.
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            await Commands.InitializeAsync(this);
         }
 
         #endregion
