@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio;
@@ -84,7 +85,6 @@ namespace SharedProjectDetailsVsix
             Instance = new Commands(package, commandService);
         }
 
-
         /// <summary>
         /// This function is the callback used to execute the command when the menu item is clicked.
         /// See the constructor to see how the menu item is associated with this function using
@@ -126,10 +126,10 @@ namespace SharedProjectDetailsVsix
                     WriteToOutputPane("Shared project: " + result as string);
 
                     WriteToOutputPane("\tProject items: ");
-                    foreach (var projectItem in GetProjectItems(hierarchies[0]))
+                    foreach (var itemId in GetProjectItems(hierarchies[0], (uint)VSConstants.VSITEMID.Root))
                     {
-                        hr = hierarchies[0].ParseCanonicalName(projectItem, out uint itemId);
-                        WriteToOutputPane($"\t\tName: [{projectItem}] Item id: [{(ErrorHandler.Succeeded(hr) ? itemId.ToString() : "NULL")}]");
+                        hr = hierarchies[0].GetCanonicalName(itemId, out string projectItemName);
+                        WriteToOutputPane($"\t\tName: [{projectItemName}] Item id: [{(ErrorHandler.Succeeded(hr) ? itemId.ToString() : "NULL")}]");
                     }
 
                     WriteToOutputPane("Importing projects: ");
@@ -139,10 +139,14 @@ namespace SharedProjectDetailsVsix
                         importingProject.GetProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_Name, out result);
                         WriteToOutputPane("\t" + result as string);
 
-                        foreach (var projectItem in GetProjectItems(hierarchies[0]))
+                        WriteToOutputPane("\tShared Project items: ");
+                        foreach (var itemId in GetProjectItems(importingProject, (uint)VSConstants.VSITEMID.Root))
                         {
-                            hr = importingProject.ParseCanonicalName(projectItem, out uint itemId);
-                            WriteToOutputPane($"\t\tName: [{projectItem}] Item id: [{(ErrorHandler.Succeeded(hr) ? itemId.ToString() : "NULL")}]");
+                            if (SharedProjectUtilities.IsSharedItem(importingProject, itemId))
+                            {
+                                hr = importingProject.GetCanonicalName(itemId, out string projectItemName);
+                                WriteToOutputPane($"\t\tName: [{projectItemName}] Item id: [{(ErrorHandler.Succeeded(hr) ? itemId.ToString() : "NULL")}]");
+                            }
                         }
                     }
 
@@ -152,45 +156,27 @@ namespace SharedProjectDetailsVsix
             }
         }
 
-        //internal static IEnumerable<IVsHierarchy> EnumerateHeadProjects(IVsHierarchy sharedProjectHierarchy)
-        //{
-        //    ThreadHelper.ThrowIfNotOnUIThread();
-
-        //    if (ErrorHandler.Succeeded(sharedProjectHierarchy.GetProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID7.VSHPROPID_SharedAssetsProject, out object pVar)))
-        //    {
-        //        IVsSharedAssetsProject sharedAssetsProject = pVar as IVsSharedAssetsProject;
-        //        if (sharedAssetsProject == null)
-        //        {
-        //            yield break;
-        //        }
-
-        //        // VC project system doesn't implement IEnumVARIANT on this interface, so use direct indexing instead of foreach
-        //        IVsEnumHierarchies importingProjectsEnum = sharedAssetsProject.EnumImportingProjects();
-        //        for (int i = 0; i != importingProjectsEnum.Count; i++)
-        //        {
-        //            yield return importingProjectsEnum[i];
-        //        }
-        //    }
-        //}
-
-        internal IEnumerable<string> GetProjectItems(IVsHierarchy projectHierarchy)
+        internal IEnumerable<uint> GetProjectItems(IVsHierarchy projectHierarchy, uint itemId)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            int hr = projectHierarchy.GetProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_FirstChild, out object result);
+            int hr = projectHierarchy.GetProperty(itemId, (int)__VSHPROPID.VSHPROPID_FirstChild, out object childItemIdObject);
 
             while (ErrorHandler.Succeeded(hr))
             {
-                if (uint.TryParse(result.ToString(), out uint itemId))
+                if (uint.TryParse(childItemIdObject.ToString(), out uint childItemId))
                 {
-                    hr = projectHierarchy.GetCanonicalName(itemId, out string projectItemName);
+                    // Read the canonical name of the child item in the project hierarchy
+                    // hr = projectHierarchy.GetCanonicalName(childItemId, out string projectItemName);
 
-                    if (ErrorHandler.Succeeded(hr))
+                    yield return childItemId;
+
+                    foreach (uint descendantItemId in GetProjectItems(projectHierarchy, childItemId))
                     {
-                        yield return projectItemName;
+                        yield return descendantItemId;
                     }
 
-                    hr = projectHierarchy.GetProperty(itemId, (int)__VSHPROPID.VSHPROPID_NextSibling, out result);
+                    hr = projectHierarchy.GetProperty(childItemId, (int)__VSHPROPID.VSHPROPID_NextSibling, out childItemIdObject);
                 }
                 else
                 {
