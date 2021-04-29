@@ -1,0 +1,22 @@
+version: 2
+updates:
+- package-ecosystem: nuget
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "13:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: Microsoft.VSSDK.BuildTools
+    versions:
+    - 16.10.10
+    - 16.10.23
+    - 16.10.31
+    - 16.10.7
+    - 16.9.1044
+  - dependency-name: Microsoft.VisualStudio.Shell.Interop.12.1.DesignTime
+    versions:
+    - 16.8.30705.32
+  - dependency-name: Microsoft.VisualStudio.SDK
+    versions:
+    - 16.0.206
